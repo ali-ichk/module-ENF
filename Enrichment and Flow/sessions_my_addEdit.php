@@ -160,7 +160,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Enrichment and Flow/sessio
 
     $row = $form->addRow();
         $row->addLabel('unlisted', __('Unlisted'))->description(__('If checked, this session will not be available for students to sign-up, but teachers can put students in this session.'));
-        $row->addYesNo('unlisted')->required();
+        $row->addYesNo('unlisted')->required()->selected('N');
 
     $form->addRow()->addColumn()->addEditor('notes')
         ->label(__('Notes').' ('.__('Optional'.')'))

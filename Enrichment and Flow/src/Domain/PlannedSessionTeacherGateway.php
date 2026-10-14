@@ -37,14 +37,11 @@ class PlannedSessionTeacherGateway extends QueryableGateway
     {
         $query = $this
             ->newSelect()
-            ->cols(['enfPlannedSessionTeacher.enfPlannedSessionTeacherID', 'gibbonPerson.gibbonPersonID', 'gibbonPerson.title', 'gibbonPerson.preferredName', 'gibbonPerson.surname', 'gibbonPerson.image_240', 'gibbonStaffAbsenceDate.allDay as absenceAllDay', 'gibbonStaffAbsenceDate.timeStart as absenceStart', 'gibbonStaffAbsenceDate.timeEnd as absenceEnd', 'enfPlannedSessionTeacher.enfPlannedSessionID', 'classTeacher.role'])
+            ->cols(['enfPlannedSessionTeacher.enfPlannedSessionTeacherID', 'gibbonPerson.gibbonPersonID', 'gibbonPerson.title', 'gibbonPerson.preferredName', 'gibbonPerson.surname', 'gibbonPerson.image_240', 'absence.allDay as absenceAllDay', 'absence.timeStart as absenceStart', 'absence.timeEnd as absenceEnd', 'enfPlannedSessionTeacher.enfPlannedSessionID', 'classTeacher.role'])
             ->from('enfPlannedSessionTeacher')
             ->innerJoin('enfPlannedSession', 'enfPlannedSession.enfPlannedSessionID=enfPlannedSessionTeacher.enfPlannedSessionID')
             ->innerJoin('enfBlock', 'enfBlock.enfBlockID=enfPlannedSession.enfBlockID')
             ->innerJoin('gibbonPerson', 'gibbonPerson.gibbonPersonID=enfPlannedSessionTeacher.gibbonPersonID')
-            ->leftJoin('gibbonStaffAbsence', 'gibbonStaffAbsence.gibbonPersonID=enfPlannedSessionTeacher.gibbonPersonID AND gibbonStaffAbsence.status="Approved"')
-            ->leftJoin('gibbonStaffAbsenceType', 'gibbonStaffAbsenceType.gibbonStaffAbsenceTypeID=gibbonStaffAbsence.gibbonStaffAbsenceTypeID')
-            ->leftJoin('gibbonStaffAbsenceDate', 'gibbonStaffAbsence.gibbonStaffAbsenceID=gibbonStaffAbsenceDate.gibbonStaffAbsenceID AND gibbonStaffAbsenceDate.date=:date')
             ->joinSubSelect(
                 'LEFT',
                 $this->newSelect()
@@ -52,6 +49,16 @@ class PlannedSessionTeacherGateway extends QueryableGateway
                     ->from('gibbonCourseClass')
                     ->innerJoin('gibbonCourseClassPerson', 'gibbonCourseClassPerson.gibbonCourseClassID=gibbonCourseClass.gibbonCourseClassID AND gibbonCourseClassPerson.role="Teacher"'),
                 'classTeacher', 'classTeacher.gibbonPersonID=enfPlannedSessionTeacher.gibbonPersonID AND classTeacher.gibbonCourseID=enfBlock.gibbonCourseID'
+            )
+            ->joinSubSelect(
+                'LEFT',
+                $this->newSelect()
+                    ->cols(['gibbonStaffAbsenceDate.allDay', 'gibbonStaffAbsenceDate.timeStart', 'gibbonStaffAbsenceDate.timeEnd', 'gibbonStaffAbsence.gibbonPersonID'])
+                    ->from('gibbonStaffAbsence')
+                    ->innerJoin('gibbonStaffAbsenceDate', 'gibbonStaffAbsence.gibbonStaffAbsenceID=gibbonStaffAbsenceDate.gibbonStaffAbsenceID')
+                    ->where('gibbonStaffAbsenceDate.date=:date')
+                    ->where('gibbonStaffAbsence.status="Approved"'),
+                'absence', 'absence.gibbonPersonID=enfPlannedSessionTeacher.gibbonPersonID'
             )
             ->where('enfPlannedSessionTeacher.enfPlannedSessionID=:enfPlannedSessionID')
             ->bindValue('enfPlannedSessionID', $enfPlannedSessionID)
