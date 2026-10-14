@@ -24,7 +24,6 @@ use Gibbon\Forms\Form;
 use Gibbon\Services\Format;
 use Gibbon\Tables\DataTable;
 use Gibbon\Support\Facades\Access;
-use Gibbon\Module\EnrichmentandFlow\Domain\BlockGateway;
 use Gibbon\Module\EnrichmentandFlow\Forms\DateSelectForm;
 use Gibbon\Module\EnrichmentandFlow\Domain\PlannedSessionGateway;
 use Gibbon\Module\EnrichmentandFlow\Domain\PlannedSessionTeacherGateway;
@@ -39,7 +38,6 @@ if (isActionAccessible($guid, $connection2, '/modules/Enrichment and Flow/sessio
     $page->breadcrumbs
         ->add(__m('All Sessions'));
 
-    $blockGateway = $container->get(BlockGateway::class);
     $sessionStudentGateway = $container->get(SessionStudentGateway::class);
     $plannedSessionGateway = $container->get(PlannedSessionGateway::class);
     $plannedSessionTeacherGateway = $container->get(PlannedSessionTeacherGateway::class);
@@ -47,11 +45,13 @@ if (isActionAccessible($guid, $connection2, '/modules/Enrichment and Flow/sessio
     $canManage = Access::allows('Enrichment and Flow', 'sessions_view', 'All Sessions_manage');
 
     // Date selector
-    $date = !empty($_GET['date'])? Format::dateConvert($_GET['date']) : date('Y-m-d');
-    $url = Url::fromModuleRoute('Enrichment and Flow', 'sessions_my');
-    $page->write($container->get(DateSelectForm::class)->createForm($url, $date)->getOutput());
-    
-    $blocks = $blockGateway->selectBlocks()->fetchAll();
+    $dateSelectForm = $container->get(DateSelectForm::class);
+    $selection = $dateSelectForm->prepareDateSelection($_GET);
+    $url = Url::fromModuleRoute('Enrichment and Flow', 'sessions_view');
+    $page->write($dateSelectForm->createResolvedForm($url, $selection)->getOutput());
+
+    $date = $selection->getSelectedDate();
+    $blocks = $selection->getBlocks();
     if (empty($blocks)) {
         $page->write($page->getBlankSlate(__m('There are no ENF sessions running at this time.')));
         return;

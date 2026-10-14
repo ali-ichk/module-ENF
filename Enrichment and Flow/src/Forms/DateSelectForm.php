@@ -19,33 +19,126 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+declare(strict_types=1);
+
 namespace Gibbon\Module\EnrichmentandFlow\Forms;
 
-use Gibbon\Forms\Form;
-use Gibbon\Domain\DataSet;
-use Gibbon\Services\Format;
+use DateTimeImmutable;
 use Gibbon\Contracts\Services\Session;
-use Gibbon\Contracts\Database\Connection;
-
-
+use Gibbon\Http\Url;
+use Gibbon\Forms\Form;
+use Gibbon\Module\EnrichmentandFlow\Domain\BlockGateway;
+use Gibbon\Module\EnrichmentandFlow\Services\WeekdayDateResolver;
+use Gibbon\Services\Format;
 
 /**
  * DateSelectForm
  */
 class DateSelectForm
 {
-    protected $session;
-    protected $db;
-    protected $substituteGateway;
-    protected $specialDayGateway;
-    protected $staffCoverageDateGateway;
-    protected $coverageMode;
-    protected $internalCoverage;
+    protected Session $session;
+    protected BlockGateway $blockGateway;
+    protected WeekdayDateResolver $dateResolver;
 
-    public function __construct(Session $session)
-    {
+    public function __construct(
+        Session $session,
+        BlockGateway $blockGateway,
+        WeekdayDateResolver $dateResolver
+    ) {
         $this->session = $session;
-    
+        $this->blockGateway = $blockGateway;
+        $this->dateResolver = $dateResolver;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function getActiveBlocks(): array
+    {
+        return $this->blockGateway->selectBlocks()->fetchAll();
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $blocks
+     * @return list<int>
+     */
+    public function extractActiveWeekdayIDs(array $blocks): array
+    {
+        $activeWeekdayIDs = [];
+
+        foreach ($blocks as $block) {
+            if (!is_array($block) || !array_key_exists('gibbonDaysOfWeekID', $block)) {
+                continue;
+            }
+
+            $weekdayID = $block['gibbonDaysOfWeekID'];
+            if (is_int($weekdayID)) {
+                $weekday = $weekdayID;
+            } elseif (is_string($weekdayID) && preg_match('/^\s*\d+\s*$/D', $weekdayID) === 1) {
+                $weekday = (int) trim($weekdayID);
+            } else {
+                continue;
+            }
+
+            if ($weekday < 1 || $weekday > 7 || in_array($weekday, $activeWeekdayIDs, true)) {
+                continue;
+            }
+
+            $activeWeekdayIDs[] = $weekday;
+        }
+
+        return $activeWeekdayIDs;
+    }
+
+    public function prepareDateSelection(
+        ?array $request = null,
+        ?DateTimeImmutable $today = null
+    ): DateSelection {
+        $blocks = $this->getActiveBlocks();
+        $activeWeekdayIDs = $this->extractActiveWeekdayIDs($blocks);
+        $today ??= new DateTimeImmutable('today');
+
+        $requestDate = null;
+        if ($request !== null && isset($request['date']) && is_string($request['date'])) {
+            $requestDate = $request['date'];
+        }
+
+        $manualDate = $this->dateResolver->parseManualDate($requestDate);
+        $selectedDate = $manualDate;
+
+        if ($selectedDate === null) {
+            if ($blocks !== [] && $activeWeekdayIDs !== []) {
+                $selectedDate = $this->dateResolver->resolveInitialDate($today, $activeWeekdayIDs) ?? $today;
+            } else {
+                $selectedDate = $today;
+            }
+        }
+
+        $previousDate = null;
+        $nextDate = null;
+        if ($blocks !== [] && $activeWeekdayIDs !== []) {
+            $navigationDates = $this->dateResolver->resolveNavigationDates($selectedDate, $activeWeekdayIDs);
+            $previousDate = $navigationDates['previousDate']?->format('Y-m-d');
+            $nextDate = $navigationDates['nextDate']?->format('Y-m-d');
+        }
+
+        return new DateSelection(
+            $blocks,
+            $activeWeekdayIDs,
+            $selectedDate->format('Y-m-d'),
+            $previousDate,
+            $nextDate
+        );
+    }
+
+    public function createResolvedForm(Url $url, DateSelection $selection): Form
+    {
+        return $this->createForm(
+            $url,
+            $selection->getSelectedDate(),
+            $selection->getPreviousDate(),
+            $selection->getNextDate()
+        );
     }
 
     public function createForm($url, $date, ?string $previousDate = null, ?string $nextDate = null)

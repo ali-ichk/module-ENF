@@ -23,7 +23,6 @@ use Gibbon\Http\Url;
 use Gibbon\Services\Format;
 use Gibbon\Forms\Form;
 use Gibbon\Tables\DataTable;
-use Gibbon\Module\EnrichmentandFlow\Domain\BlockGateway;
 use Gibbon\Module\EnrichmentandFlow\Domain\PlannedSessionGateway;
 use Gibbon\Module\EnrichmentandFlow\Domain\PlannedSessionTeacherGateway;
 use Gibbon\Module\EnrichmentandFlow\Domain\SessionStudentGateway;
@@ -40,17 +39,18 @@ if (isActionAccessible($guid, $connection2, '/modules/Enrichment and Flow/sessio
         ->add(__m('My Sessions'));
 
     // Date selector
-    $date = !empty($_GET['date'])? Format::dateConvert($_GET['date']) : date('Y-m-d');
+    $dateSelectForm = $container->get(DateSelectForm::class);
+    $selection = $dateSelectForm->prepareDateSelection($_GET);
     $url = Url::fromModuleRoute('Enrichment and Flow', 'sessions_my');
-    $page->write($container->get(DateSelectForm::class)->createForm($url, $date)->getOutput());
+    $page->write($dateSelectForm->createResolvedForm($url, $selection)->getOutput());
+    $date = $selection->getSelectedDate();
 
-    $blockGateway = $container->get(BlockGateway::class);
     $attendanceGateway = $container->get(AttendanceLogPersonGateway::class);
     $sessionStudentGateway = $container->get(SessionStudentGateway::class);
     $plannedSessionGateway = $container->get(PlannedSessionGateway::class);
     $plannedSessionTeacherGateway = $container->get(PlannedSessionTeacherGateway::class);
 
-    $blocks = $blockGateway->selectBlocks()->fetchAll();
+    $blocks = $selection->getBlocks();
     if (empty($blocks)) {
         $page->write($page->getBlankSlate(__m('There are no ENF sessions running at this time.')));
         return;
@@ -138,7 +138,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Enrichment and Flow/sessio
 
             foreach ($sessions[0]['students'] as $student) {
                 $url = Url::fromModuleRoute('Enrichment and Flow', 'planner_view.php')->withQueryParams(['gibbonPersonID' => $student['gibbonPersonID']]);
-                $attendance = $attendanceGateway->selectAttendanceLogsByPersonAndDate($student['gibbonPersonID'], $this->date, 'N');
+                $attendance = $attendanceGateway->selectAttendanceLogsByPersonAndDate($student['gibbonPersonID'], $date, 'N');
                 $log = ($attendance->rowCount() > 0) ? $attendance->fetch() : [];
                 $isAbsent = !empty($log) && ($log['direction'] == 'Out' || $log['scope'] == 'Offsite');
 

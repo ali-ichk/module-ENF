@@ -84,6 +84,17 @@ class WeekdayDateResolver
     }
 
     /**
+     * @return array{previousDate: ?DateTimeImmutable, nextDate: ?DateTimeImmutable}
+     */
+    public function resolveNavigationDates(DateTimeImmutable $selectedDate, array $activeWeekdayIDs): array
+    {
+        return [
+            'previousDate' => $this->resolvePreviousDate($selectedDate, $activeWeekdayIDs),
+            'nextDate' => $this->resolveNextDate($selectedDate, $activeWeekdayIDs),
+        ];
+    }
+
+    /**
      * @param array<int, bool> $weekdays
      */
     private function findNearestDate(DateTimeImmutable $date, array $weekdays, int $direction): ?DateTimeImmutable
