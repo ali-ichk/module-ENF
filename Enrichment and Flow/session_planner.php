@@ -29,6 +29,7 @@ use Gibbon\Module\EnrichmentandFlow\Domain\PlannedSessionTeacherGateway;
 use Gibbon\Module\EnrichmentandFlow\Domain\SessionStudentGateway;
 use Gibbon\Module\EnrichmentandFlow\ENFFormat;
 use Gibbon\Module\EnrichmentandFlow\Forms\DateSelectForm;
+use Gibbon\Module\EnrichmentandFlow\Services\WeekdayDateResolver;
 
 
 if (isActionAccessible($guid, $connection2, '/modules/Enrichment and Flow/session_planner.php') == false) {
@@ -39,22 +40,57 @@ if (isActionAccessible($guid, $connection2, '/modules/Enrichment and Flow/sessio
     $page->breadcrumbs
         ->add(__m('Session Planner'));
 
-    // Date selector
-    $date = $_GET['date'] ?? date('Y-m-d');
-    $url = Url::fromModuleRoute('Enrichment and Flow', 'sessions_my');
-    $page->write($container->get(DateSelectForm::class)->createForm($url, $date)->getOutput());
-
     $blockGateway = $container->get(BlockGateway::class);
+    $blocks = $blockGateway->selectBlocks()->fetchAll();
+    $dateResolver = $container->get(WeekdayDateResolver::class);
+    $manualDateValue = isset($_GET['date']) && is_string($_GET['date']) ? $_GET['date'] : null;
+    $manualDate = $dateResolver->parseManualDate($manualDateValue);
+    $url = Url::fromModuleRoute('Enrichment and Flow', 'sessions_my');
+    $dateSelectForm = $container->get(DateSelectForm::class);
+
+    if (empty($blocks)) {
+        $date = $manualDate?->format('Y-m-d') ?? date('Y-m-d');
+        $page->write($dateSelectForm->createForm($url, $date)->getOutput());
+        $page->write($page->getBlankSlate(__m('There are no ENF sessions running at this time.')));
+        return;
+    }
+
+    $activeWeekdayIDs = [];
+    foreach ($blocks as $block) {
+        $weekdayID = $block['gibbonDaysOfWeekID'] ?? null;
+        if (is_int($weekdayID)) {
+            $weekdayID = (string) $weekdayID;
+        }
+
+        if (is_string($weekdayID) && preg_match('/^\s*\d+\s*$/D', $weekdayID) === 1) {
+            $weekdayID = (int) trim($weekdayID);
+            if ($weekdayID >= 1 && $weekdayID <= 7) {
+                $activeWeekdayIDs[$weekdayID] = true;
+            }
+        }
+    }
+    $activeWeekdayIDs = array_keys($activeWeekdayIDs);
+
+    $selectedDate = $manualDate ?? $dateResolver->resolveInitialDate(new DateTimeImmutable('today'), $activeWeekdayIDs);
+    if ($selectedDate === null) {
+        $page->write($page->getBlankSlate(__m('There are no ENF sessions running at this time.')));
+        return;
+    }
+
+    $date = $selectedDate->format('Y-m-d');
+    $previousDate = $dateResolver->resolvePreviousDate($selectedDate, $activeWeekdayIDs);
+    $nextDate = $dateResolver->resolveNextDate($selectedDate, $activeWeekdayIDs);
+    $page->write($dateSelectForm->createForm(
+        $url,
+        $date,
+        $previousDate?->format('Y-m-d'),
+        $nextDate?->format('Y-m-d')
+    )->getOutput());
+
     $blockFacilityGateway = $container->get(BlockFacilityGateway::class);
     $sessionStudentGateway = $container->get(SessionStudentGateway::class);
     $plannedSessionGateway = $container->get(PlannedSessionGateway::class);
     $plannedSessionTeacherGateway = $container->get(PlannedSessionTeacherGateway::class);
-
-    $blocks = $blockGateway->selectBlocks()->fetchAll();
-    if (empty($blocks)) {
-        $page->write($page->getBlankSlate(__m('There are no ENF sessions running at this time.')));
-        return;
-    }
 
     // FORM
     $form = MultiPartForm::create('sessionPlanner', $session->get('absoluteURL').'/modules/Enrichment and Flow/session_plannerProcess.php');

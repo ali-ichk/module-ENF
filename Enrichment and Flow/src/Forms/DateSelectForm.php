@@ -48,7 +48,7 @@ class DateSelectForm
     
     }
 
-    public function createForm($url, $date)
+    public function createForm($url, $date, ?string $previousDate = null, ?string $nextDate = null)
     {
         $form = Form::create('dateSelect', $url, 'get');
         $form->setClass('blank w-full');
@@ -62,7 +62,20 @@ class DateSelectForm
 
         $col = $row->addColumn()->addClass('flex items-center justify-end gap-2');
 
+        if ($previousDate !== null) {
+            $col->addWebLink(__('Previous'))
+                ->setURL($url->withQueryParam('date', $previousDate))
+                ->addClass('px-3 py-2 text-xs font-medium text-gray-600');
+        }
+
         $col->addDate('date')->setValue(Format::date($date))->setClass('w-48');
+
+        if ($nextDate !== null) {
+            $col->addWebLink(__('Next'))
+                ->setURL($url->withQueryParam('date', $nextDate))
+                ->addClass('px-3 py-2 text-xs font-medium text-gray-600');
+        }
+
         $col->addSubmit(__('Go'));
 
         return $form;

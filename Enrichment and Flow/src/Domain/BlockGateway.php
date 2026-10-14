@@ -52,7 +52,7 @@ class BlockGateway extends QueryableGateway
     public function selectBlocks()
     {
         $data = [];
-        $sql = "SELECT enfBlock.enfBlockID, enfBlock.name, enfBlock.timeStart, enfBlock.timeEnd, enfBlock.signUpSameDay, enfBlock.signUpStart, gibbonDaysOfWeek.name as weekday
+        $sql = "SELECT enfBlock.enfBlockID, enfBlock.gibbonDaysOfWeekID, enfBlock.name, enfBlock.timeStart, enfBlock.timeEnd, enfBlock.signUpSameDay, enfBlock.signUpStart, gibbonDaysOfWeek.name as weekday
                 FROM enfBlock
                 JOIN gibbonDaysOfWeek ON (gibbonDaysOfWeek.gibbonDaysOfWeekID=enfBlock.gibbonDaysOfWeekID)
                 WHERE enfBlock.active='Y'
