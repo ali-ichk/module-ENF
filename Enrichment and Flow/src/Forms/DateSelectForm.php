@@ -30,15 +30,31 @@ use Gibbon\Forms\Form;
 use Gibbon\Module\EnrichmentandFlow\Domain\BlockGateway;
 use Gibbon\Module\EnrichmentandFlow\Services\WeekdayDateResolver;
 use Gibbon\Services\Format;
+use LogicException;
 
 /**
  * DateSelectForm
  */
 class DateSelectForm
 {
-    protected Session $session;
-    protected BlockGateway $blockGateway;
-    protected WeekdayDateResolver $dateResolver;
+    private Session $session;
+    private BlockGateway $blockGateway;
+    private WeekdayDateResolver $dateResolver;
+
+    /**
+     * @var array<int, array<string, mixed>>
+     */
+    private array $blocks = [];
+
+    /**
+     * @var list<int>
+     */
+    private array $activeWeekdayIDs = [];
+
+    private ?string $selectedDate = null;
+    private ?string $previousDate = null;
+    private ?string $nextDate = null;
+    private bool $prepared = false;
 
     public function __construct(
         Session $session,
@@ -51,18 +67,122 @@ class DateSelectForm
     }
 
     /**
+     * Prepare the request-scoped date selection state.
+     *
+     * @param array<string, mixed>|null $request
+     */
+    public function setDate(
+        ?array $request = null,
+        ?DateTimeImmutable $today = null
+    ): DateSelectForm {
+        $this->blocks = [];
+        $this->activeWeekdayIDs = [];
+        $this->selectedDate = null;
+        $this->previousDate = null;
+        $this->nextDate = null;
+        $this->prepared = false;
+
+        $blocks = $this->blockGateway->selectBlocks()->fetchAll();
+        $activeWeekdayIDs = $this->extractActiveWeekdayIDs($blocks);
+        $today ??= new DateTimeImmutable('today');
+
+        $requestDate = null;
+        if ($request !== null && array_key_exists('date', $request) && is_string($request['date'])) {
+            $requestDate = $request['date'];
+        }
+
+        $manualDate = $this->dateResolver->parseManualDate($requestDate);
+        $selectedDate = $manualDate;
+
+        if ($selectedDate === null) {
+            if ($blocks !== [] && $activeWeekdayIDs !== []) {
+                $selectedDate = $this->dateResolver->resolveInitialDate($today, $activeWeekdayIDs) ?? $today;
+            } else {
+                $selectedDate = $today;
+            }
+        }
+
+        $previousDate = null;
+        $nextDate = null;
+        if ($blocks !== [] && $activeWeekdayIDs !== []) {
+            $navigationDates = $this->dateResolver->resolveNavigationDates($selectedDate, $activeWeekdayIDs);
+            $previousDate = $navigationDates['previousDate']?->format('Y-m-d');
+            $nextDate = $navigationDates['nextDate']?->format('Y-m-d');
+        }
+
+        $selectedDateString = $selectedDate->format('Y-m-d');
+
+        // Replace the complete state only after all values have been prepared successfully.
+        $this->blocks = $blocks;
+        $this->activeWeekdayIDs = $activeWeekdayIDs;
+        $this->selectedDate = $selectedDateString;
+        $this->previousDate = $previousDate;
+        $this->nextDate = $nextDate;
+        $this->prepared = true;
+
+        return $this;
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
-    public function getActiveBlocks(): array
+    public function getBlocks(): array
     {
-        return $this->blockGateway->selectBlocks()->fetchAll();
+        $this->assertPrepared();
+
+        return $this->blocks;
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function getActiveWeekdayIDs(): array
+    {
+        $this->assertPrepared();
+
+        return $this->activeWeekdayIDs;
+    }
+
+    public function hasActiveBlocks(): bool
+    {
+        $this->assertPrepared();
+
+        return $this->blocks !== [];
+    }
+
+    public function hasActiveWeekdaySchedule(): bool
+    {
+        $this->assertPrepared();
+
+        return $this->activeWeekdayIDs !== [];
+    }
+
+    public function getSelectedDate(): string
+    {
+        $this->assertPrepared();
+
+        return $this->selectedDate ?? throw new LogicException('Date selection was prepared without a selected date.');
+    }
+
+    public function getPreviousDate(): ?string
+    {
+        $this->assertPrepared();
+
+        return $this->previousDate;
+    }
+
+    public function getNextDate(): ?string
+    {
+        $this->assertPrepared();
+
+        return $this->nextDate;
     }
 
     /**
      * @param array<int, array<string, mixed>> $blocks
      * @return list<int>
      */
-    public function extractActiveWeekdayIDs(array $blocks): array
+    private function extractActiveWeekdayIDs(array $blocks): array
     {
         $activeWeekdayIDs = [];
 
@@ -90,58 +210,14 @@ class DateSelectForm
         return $activeWeekdayIDs;
     }
 
-    public function prepareDateSelection(
-        ?array $request = null,
-        ?DateTimeImmutable $today = null
-    ): DateSelection {
-        $blocks = $this->getActiveBlocks();
-        $activeWeekdayIDs = $this->extractActiveWeekdayIDs($blocks);
-        $today ??= new DateTimeImmutable('today');
-
-        $requestDate = null;
-        if ($request !== null && isset($request['date']) && is_string($request['date'])) {
-            $requestDate = $request['date'];
-        }
-
-        $manualDate = $this->dateResolver->parseManualDate($requestDate);
-        $selectedDate = $manualDate;
-
-        if ($selectedDate === null) {
-            if ($blocks !== [] && $activeWeekdayIDs !== []) {
-                $selectedDate = $this->dateResolver->resolveInitialDate($today, $activeWeekdayIDs) ?? $today;
-            } else {
-                $selectedDate = $today;
-            }
-        }
-
-        $previousDate = null;
-        $nextDate = null;
-        if ($blocks !== [] && $activeWeekdayIDs !== []) {
-            $navigationDates = $this->dateResolver->resolveNavigationDates($selectedDate, $activeWeekdayIDs);
-            $previousDate = $navigationDates['previousDate']?->format('Y-m-d');
-            $nextDate = $navigationDates['nextDate']?->format('Y-m-d');
-        }
-
-        return new DateSelection(
-            $blocks,
-            $activeWeekdayIDs,
-            $selectedDate->format('Y-m-d'),
-            $previousDate,
-            $nextDate
-        );
-    }
-
-    public function createResolvedForm(Url $url, DateSelection $selection): Form
+    private function assertPrepared(): void
     {
-        return $this->createForm(
-            $url,
-            $selection->getSelectedDate(),
-            $selection->getPreviousDate(),
-            $selection->getNextDate()
-        );
+        if (!$this->prepared) {
+            throw new LogicException('Date selection must be prepared before its state can be read.');
+        }
     }
 
-    public function createForm($url, $date, ?string $previousDate = null, ?string $nextDate = null)
+    public function createForm($url, bool $submitButton = true): Form
     {
         $form = Form::create('dateSelect', $url, 'get');
         $form->setClass('blank w-full');
@@ -150,26 +226,30 @@ class DateSelectForm
 
         $row = $form->addRow()->addClass('flex flex-wrap mb-4');
         // if (!empty($announcement)) {
-        //     $row->addContent('<h3>'.__m('Announcements').'</h3>');
+            $row->addContent('<h3>'.Format::dateReadable($this->selectedDate, Format::FULL_NO_YEAR).'</h3>');
         // }
 
-        $col = $row->addColumn()->addClass('flex items-center justify-end gap-2');
+        $col = $row->addColumn()->addClass('flex items-center justify-end ');
 
-        if ($previousDate !== null) {
-            $col->addWebLink(__('Previous'))
-                ->setURL($url->withQueryParam('date', $previousDate))
-                ->addClass('px-3 py-2 text-xs font-medium text-gray-600');
+        if ($this->previousDate) {
+            $col->addAction('previous', __('Previous'))
+                ->setURL($url->withQueryParam('date', $this->previousDate))
+                ->addClass('px-3 py-2 text-xs font-medium text-gray-600')
+                ->displayLabel(false);
         }
 
-        $col->addDate('date')->setValue(Format::date($date))->setClass('w-48');
+        $col->addDate('date')->setValue(Format::date($this->selectedDate))->setClass('w-48');
 
-        if ($nextDate !== null) {
-            $col->addWebLink(__('Next'))
-                ->setURL($url->withQueryParam('date', $nextDate))
-                ->addClass('px-3 py-2 text-xs font-medium text-gray-600');
+        if ($this->nextDate) {
+            $col->addAction('next', __('Next'))
+                ->setURL($url->withQueryParam('date', $this->nextDate))
+                ->addClass('px-3 py-2 text-xs font-medium text-gray-600')
+                ->displayLabel(false);
         }
 
-        $col->addSubmit(__('Go'));
+        if ($submitButton) {
+            $col->addSubmit(__('Go'));
+        }
 
         return $form;
     }

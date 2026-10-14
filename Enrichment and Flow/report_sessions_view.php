@@ -43,12 +43,12 @@ if (isActionAccessible($guid, $connection2, '/modules/Enrichment and Flow/sessio
     $plannedSessionTeacherGateway = $container->get(PlannedSessionTeacherGateway::class);
 
     $dateSelectForm = $container->get(DateSelectForm::class);
-    $selection = $dateSelectForm->prepareDateSelection($_GET);
+    $dateSelectForm->setDate($_GET);
     $url = Url::fromModuleRoute('Enrichment and Flow', 'report_sessions_view');
-    $page->write($dateSelectForm->createResolvedForm($url, $selection)->getOutput());
+    $page->write($dateSelectForm->createForm($url)->getOutput());
 
-    $date = $selection->getSelectedDate();
-    $blocks = $selection->getBlocks();
+    $date = $dateSelectForm->getSelectedDate();
+    $blocks = $dateSelectForm->getBlocks();
     $students = $sessionStudentGateway->selectENFStudentsByDate($session->get('gibbonSchoolYearID'), $date)->fetchAll();
 
     $studentsMissing = [];

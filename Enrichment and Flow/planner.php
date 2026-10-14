@@ -19,12 +19,14 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-use Gibbon\Services\Format;
 use Gibbon\Forms\Form;
-use Gibbon\Module\EnrichmentandFlow\View\StudentPlannerView;
-use Gibbon\Module\EnrichmentandFlow\View\StaffPlannerView;
+use Gibbon\Http\Url;
 use Gibbon\Module\EnrichmentandFlow\Domain\AnnouncementGateway;
 use Gibbon\Module\EnrichmentandFlow\Domain\DailyPlannerGateway;
+use Gibbon\Module\EnrichmentandFlow\Forms\DateSelectForm;
+use Gibbon\Module\EnrichmentandFlow\View\StaffPlannerView;
+use Gibbon\Module\EnrichmentandFlow\View\StudentPlannerView;
+use Gibbon\Services\Format;
 
 if (isActionAccessible($guid, $connection2, '/modules/Enrichment and Flow/planner.php') == false) {
     // Access denied
@@ -37,35 +39,36 @@ if (isActionAccessible($guid, $connection2, '/modules/Enrichment and Flow/planne
     }
 
     $gibbonCourseClassID = $_REQUEST['gibbonCourseClassID'] ?? null;
-    $date = !empty($_GET['date'])? Format::dateConvert($_GET['date']) : date('Y-m-d');
-    $announcement = $container->get(AnnouncementGateway::class)->getAnnouncementByDate($date);
     $dailyPlannerGateway = $container->get(DailyPlannerGateway::class);
 
     // Date selector form
-    $form = Form::create('dateSelect', $session->get('absoluteURL').'/index.php?q=/modules/Enrichment and Flow/planner.php', 'get');
-    $form->setClass('blank w-full');
-    $form->addHiddenValue('q', $session->get('address'));
+    $url = Url::fromModuleRoute('Enrichment and Flow', 'planner');
+    $dateSelectForm = $container->get(DateSelectForm::class)->setDate($_GET);
+    $form = $dateSelectForm->createForm($url, false);
+    $date = $dateSelectForm->getSelectedDate();
 
-    $row = $form->addRow()->addClass('flex flex-wrap mb-4');
-    if (!empty($announcement)) {
-        $row->addContent('<h3>'.__m('Announcements').'</h3>');
-    }
-
-    $col = $row->addColumn()->addClass('flex items-center justify-end');
+    $col = $form->getRow()->addColumn()->setClass('flex-shrink flex items-center self-center');
 
     // Display class selector
     if ($highestAction == 'Planner Overview') {
         $class = $dailyPlannerGateway->getENFClassByPerson($session->get('gibbonSchoolYearID'), $session->get('gibbonPersonID'));
         $classes = $dailyPlannerGateway->selectAllENFClasses($session->get('gibbonSchoolYearID'))->fetchKeyPair();
-        $col->addSelect('gibbonCourseClassID')->fromArray($classes)->setClass('shortWidth mr-1')->selected($gibbonCourseClassID ?? $class['gibbonCourseClassID'] ?? '')->placeholder('[ '.__m('Select a Class').' ]');
+        
+        $col->addSelect('gibbonCourseClassID')->fromArray($classes)->setClass('w-48 mr-1')->selected($gibbonCourseClassID ?? $class['gibbonCourseClassID'] ?? '')->placeholder('[ '.__m('Select a Class').' ]');
 
         if (empty($gibbonCourseClassID)) {
             $gibbonCourseClassID = $class['gibbonCourseClassID'] ?? '';
         }
     }
 
-    $col->addDate('date')->setValue(Format::date($date))->setClass('shortWidth');
     $col->addSubmit(__('Go'));
+
+    $announcement = $container->get(AnnouncementGateway::class)->getAnnouncementByDate($date);
+    if (!empty($announcement)) {
+        $row = $form->addRow()->addClass('flex flex-wrap mb-4');
+        $row->addContent('<h3>'.__m('Announcements').'</h3>');
+    }
+    
 
     $page->write($form->getOutput());
 

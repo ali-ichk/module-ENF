@@ -40,17 +40,17 @@ if (isActionAccessible($guid, $connection2, '/modules/Enrichment and Flow/sessio
 
     // Date selector
     $dateSelectForm = $container->get(DateSelectForm::class);
-    $selection = $dateSelectForm->prepareDateSelection($_GET);
+    $dateSelectForm->setDate($_GET);
     $url = Url::fromModuleRoute('Enrichment and Flow', 'sessions_my');
-    $page->write($dateSelectForm->createResolvedForm($url, $selection)->getOutput());
-    $date = $selection->getSelectedDate();
+    $page->write($dateSelectForm->createForm($url)->getOutput());
 
     $attendanceGateway = $container->get(AttendanceLogPersonGateway::class);
     $sessionStudentGateway = $container->get(SessionStudentGateway::class);
     $plannedSessionGateway = $container->get(PlannedSessionGateway::class);
     $plannedSessionTeacherGateway = $container->get(PlannedSessionTeacherGateway::class);
 
-    $blocks = $selection->getBlocks();
+    $date = $dateSelectForm->getSelectedDate();
+    $blocks = $dateSelectForm->getBlocks();
     if (empty($blocks)) {
         $page->write($page->getBlankSlate(__m('There are no ENF sessions running at this time.')));
         return;

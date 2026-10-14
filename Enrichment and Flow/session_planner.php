@@ -39,13 +39,13 @@ if (isActionAccessible($guid, $connection2, '/modules/Enrichment and Flow/sessio
         ->add(__m('Session Planner'));
 
     $dateSelectForm = $container->get(DateSelectForm::class);
-    $selection = $dateSelectForm->prepareDateSelection($_GET);
+    $dateSelectForm->setDate($_GET);
     $url = Url::fromModuleRoute('Enrichment and Flow', 'session_planner');
-    $page->write($dateSelectForm->createResolvedForm($url, $selection)->getOutput());
+    $page->write($dateSelectForm->createForm($url)->getOutput());
 
-    $date = $selection->getSelectedDate();
-    $blocks = $selection->getBlocks();
-    if (empty($blocks) || !$selection->hasActiveWeekdaySchedule()) {
+    $date = $dateSelectForm->getSelectedDate();
+    $blocks = $dateSelectForm->getBlocks();
+    if (empty($blocks) || !$dateSelectForm->hasActiveWeekdaySchedule()) {
         $page->write($page->getBlankSlate(__m('There are no ENF sessions running at this time.')));
         return;
     }
